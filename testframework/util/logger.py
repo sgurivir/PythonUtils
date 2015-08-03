@@ -4,13 +4,13 @@ def prepare_logging(filename='/tmp/test.log'):
     """ Sets global logging configuration
     """
     formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-    logger = logging.getLogger().setLevel(logging.DEBUG)
+    logging.getLogger().setLevel(logging.DEBUG)
 
     # Add file handler
-    logger.addHandler(logging.FileHandler(filename).setFormatter(formatter))
+    logging.getLogger().addHandler(logging.FileHandler(filename).setFormatter(formatter))
 
     # Add stderr handler
-    logger.addHandler(logging.StreamHandler().setFormatter(formatter))
+    logging.getLogger().addHandler(logging.StreamHandler().setFormatter(formatter))
 
 
 def main():
