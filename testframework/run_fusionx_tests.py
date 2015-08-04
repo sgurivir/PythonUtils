@@ -1,5 +1,5 @@
-import logging
 from optparse import OptionParser
+import os
 import sys
 
 from util import ConfigLogging
