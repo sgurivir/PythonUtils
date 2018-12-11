@@ -257,3 +257,125 @@ for num in range(1000, 3000):
     if is_all_digits_even:
         print "{} has all even digits".format(num_str)
 
+"""
+Question 13
+Level 2
+
+Question:
+Write a program that accepts a sentence and calculate the number of letters and digits.
+Suppose the following input is supplied to the program:
+hello world! 123
+Then, the output should be:
+LETTERS 10
+DIGITS 3
+"""
+line = "A 1 Quick Brown fox jumped over 10 lazy dogs"
+counts = {"LETTERS": 0, "DIGITS": 3}
+for c in line:
+    if c.isdigit():
+        counts["DIGITS"] += 1
+    if c.isalpha():
+        counts["LETTERS"] += 1
+
+print counts["DIGITS"]
+print counts["LETTERS"]
+
+
+"""
+Question 15
+Level 2
+
+Question:
+Write a program that computes the value of a+aa+aaa+aaaa with a given digit as the value of a.
+Suppose the following input is supplied to the program:
+9
+Then, the output should be:
+11106
+"""
+input_digit = "9"
+a1 = int("{}".format(input_digit))
+a2 = int("{}{}".format(input_digit, input_digit))
+a3 = int("{}{}{}".format(input_digit, input_digit, input_digit))
+a4 = int("{}{}{}{}".format(input_digit, input_digit, input_digit, input_digit))
+print a1 + a2 + a3 + a4
+
+"""
+Question 16
+Level 2
+
+Question:
+Use a list comprehension to square each odd number in a list. The list is input by a sequence of comma-separated numbers.
+Suppose the following input is supplied to the program:
+1,2,3,4,5,6,7,8,9
+Then, the output should be:
+1,3,5,7,9
+"""
+
+original_list = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+filtered_list = [x for x in original_list if x % 2 == 1]
+print filtered_list
+
+"""
+Question 17
+Level 2
+
+Question:
+Write a program that computes the net amount of a bank account based a transaction log from console input. The transaction log format is shown as following:
+D 100
+W 200
+
+D means deposit while W means withdrawal.
+Suppose the following input is supplied to the program:
+D 300
+D 300
+W 200
+D 100
+Then, the output should be:
+500
+"""
+transactions = ["D 300",
+                "D 300",
+                "W 200",
+                "D 100",
+                "D 500"
+               ]
+deposits = list(filter(lambda _x : _x.startswith("D"), transactions))
+deposits = [int(x.replace("D ", "")) for x in deposits]
+
+withdrawals = list(filter(lambda _x : _x.startswith("W"), transactions))
+withdrawals = [int(x.replace("W ", "")) for x in withdrawals]
+
+balance = 0
+print deposits
+print withdrawals
+print sum(deposits) - sum(withdrawals)
+
+"""
+#----------------------------------------#
+Question 19
+Level 3
+
+Question:
+You are required to write a program to sort the (name, age, height) tuples by ascending order where name is string, age and height are numbers. The tuples are input by console. The sort criteria is:
+1: Sort based on name;
+2: Then sort based on age;
+3: Then sort by score.
+The priority is that name > age > score.
+If the following tuples are given as input to the program:
+Tom,19,80
+John,20,90
+Jony,17,91
+Jony,17,93
+Json,21,85
+Then, the output of the program should be:
+[('John', '20', '90'), ('Jony', '17', '91'), ('Jony', '17', '93'), ('Json', '21', '85'), ('Tom', '19', '80')]
+"""
+
+students = [("Tom", 19, 80),
+            ("John", 20, 20),
+            ("Jony", 17, 91),
+            ("jony", 17, 93),
+            ("Json", 21, 85)
+            ]
+from operator import itemgetter
+print sorted(students, key=itemgetter(0,1,2))
