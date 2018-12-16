@@ -46,7 +46,6 @@ print list_h
 for l in list_h:
     print l
 
-
 """
 ----------------------- Tuples ------------------------------
 Tuples are immutable
@@ -74,3 +73,7 @@ print set_s
 """
 dict_d = {"A": 1, "B":2, "C":3, "D":4}
 print dict_d["A"]
+del dict_d["A"]
+print dict_d
+
+

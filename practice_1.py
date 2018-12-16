@@ -351,6 +351,22 @@ print withdrawals
 print sum(deposits) - sum(withdrawals)
 
 """
+Sets examples
+Sets dont hold duplicates.. You can create set by using its constructor (or) using {}
+"""
+set_x = set(["A", "B", "C"])
+set_x.add("D")
+set_x.add("A")
+print set_x
+
+set_y = {"A", "B", "C"}
+set_y.add("D")
+set_y.add("A")
+print set_y
+
+
+
+"""
 #----------------------------------------#
 Question 19
 Level 3
@@ -377,5 +393,27 @@ students = [("Tom", 19, 80),
             ("jony", 17, 93),
             ("Json", 21, 85)
             ]
+
+
+"""
+def get_student(s_):
+    for student in s_:
+        student(0) = student(0).upper()
+        yield student
+
+
 from operator import itemgetter
-print sorted(students, key=itemgetter(0,1,2))
+print sorted(get_student(students), key=itemgetter(0,1,2))
+"""
+
+"""
+#----------------------------------------#
+Question 20
+Level 3
+
+Question:
+Define a class with a generator which can iterate the numbers, which are divisible by 7, between a given range 0 and n.
+
+Hints:
+Consider use yield
+"""
