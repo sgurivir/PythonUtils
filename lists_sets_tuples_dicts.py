@@ -77,3 +77,9 @@ del dict_d["A"]
 print dict_d
 
 
+"""
+------------------------Convert list to set -------------------
+"""
+list_with_duplicates = [1,2,3,4,5,5,5,6,7,7,8]
+set_without_duplicates = set(list_with_duplicates)
+print set_without_duplicates

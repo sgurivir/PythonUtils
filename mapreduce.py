@@ -1,30 +1,23 @@
 import sys
 
-def convertDollarToRupees(dollarAmount) :
-  return dollarAmount * 63
-  
-def simpleMapExample():
-  dollar_amounts = [ 10, 20, 30, 40, 50, 60 ]
-  print map(convertDollarToRupees, dollar_amounts)
 
-def lambdaExample():
-  dollar_amounts = [ 10, 20, 30, 40, 50, 60 ]
-  print map(lambda x:x*63, dollar_amounts)
-  
-def lambdaCircumferenceAndArea():
-  boxes = [[1,2], [3,4], [5,6] , [4,4]]
-  print map(lambda x: (x[0]*x[1], x[0]+x[1]), boxes)
-  
-def reduceSimpleExample():
-  scores = [ 47, 53, 102, 98, 2, 20, 8, 70 ]
-  print reduce( lambda x,y: x+y, scores)
-  
-def main():
-  simpleMapExample()
-  simpleMapInlineExample()
-  lambdaExample()
-  lambdaCircumferenceAndArea()
-  reduceSimpleExample()
+# ----------------------------------------------------------
+# List comprehension
+# ----------------------------------------------------------
+def convertToRupee(amount, exchange_rate):
+  return float(amount) * exchange_rate
 
-main()
-  
+dollar_amounts = [5, 10, 12, 28]
+
+rupee_amounts = [convertToRupee(x, 69) for x in dollar_amounts]
+rupee_amounts_alt = list(map(lambda x: convertToRupee(x, 69), dollar_amounts))
+print rupee_amounts
+print rupee_amounts_alt
+
+# ----------------------------------------------------------
+# filter
+# ---------------------------------------------------------
+tokens = ["aswe", "sfdsasf", "ADEESSSD", "SES", "awessf"]
+
+print filter(lambda x: x.startswith("a"), tokens)
+# ---------------

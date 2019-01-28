@@ -1,14 +1,15 @@
-import os
-import json
-import re
 
 
-class Point(object):
-    def __init__(self):
-	    pass
+class Cube(object):
+    def __init__(self, x, y, z):
+        self.x = x
+        self.y = y
+        self.z = z
 
-a = Point()
-[a.x, a.y, a.z] = re.findall(r"[-+]?\d*\.*\d+", "Total: 40645 success: 34830 failure: 5815")
+    @property
+    def area(self):
+        return self.x * self.y * self.z
 
-print a.x
-print a.y
+
+a = Cube(2, 3, 4)
+print a.area

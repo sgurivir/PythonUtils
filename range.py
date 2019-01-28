@@ -1,2 +1,2 @@
-for index in range(0, 1):
-  print index
+for index in range(0, 10):
+    print index
