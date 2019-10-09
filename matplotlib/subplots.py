@@ -4,29 +4,21 @@ import os
 import sys
 
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 
 from LocationQA.Common.Motion.msl_parser import MSLFile
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Provide System and Replay MSL for Pedometer replay')
     parser.add_argument('--system_msl', '-s', dest="system_msl_path", default=None, required=True)
-    parser.add_argument('--replay_msl', '-r', dest="mth_replay_output_path", default=None, required=True)
     parser.add_argument('--proto_file_path', '-p', dest="proto_file_path", default=None, required=True)
+    parser.add_argument('--output_chart_path', '-o', dest="output_chart_path", default=None, required=True)
     args = parser.parse_args()
 
     # Check if arguments are well formed
-    if not args.system_msl_path or not args.mth_replay_output_path or not args.proto_file_path:
-        print" Usage: replay_pedometer.py -s <system_msl> -r <replay_msl> -p <path_to_proto>"
-        sys.exit(-1)
-
     if not os.path.exists(args.system_msl_path):
         print "Cant find system msl file"
         sys.exit(-1)
 
-    if not os.path.exists(args.mth_replay_output_path):
-        print "Cant find output replay path"
-        sys.exit(-1)
 
     if not os.path.exists(args.proto_file_path):
         print "Cant find proto file path"
@@ -35,77 +27,53 @@ if __name__ == '__main__':
     # Load in-system msl file
     in_system_msl_file = MSLFile(args.system_msl_path, args.proto_file_path)
     in_system_msl_file.decode_proto()
-    in_system_df = in_system_msl_file.to_dict(['stepCountEntry'])
-    in_system_steps = in_system_df['stepCountEntry']
 
-    # Load replay MSL file
-    replay_msl_file = MSLFile(args.mth_replay_output_path, args.proto_file_path)
-    replay_msl_file.decode_proto()
-    replay_msl_file_df = replay_msl_file.to_dict(['stepCountEntry'])
 
-    # ------------------- Plot WalkingSpeed "System vs Replay" --------------------------------
+    in_system_df = in_system_msl_file.to_dict(['workoutRecorderAccel', 'super'])
+
+    # ------------------- Prepare data for  WalkingSpeed "System vs Replay" --------------------------------
     # Get Step Count entries from System
-    st = np.array(in_system_df['stepCountEntry']['cftime'], dtype=float)
-    ss = np.array(in_system_df['stepCountEntry']['movementStats']['walkingVariable01'], dtype=float)
+    st = np.array(in_system_df['workoutRecorderAccel']['super']['timestamp'], dtype=float)
 
-    # Get Step Count entries from replay
-    rt = np.array(replay_msl_file_df['stepCountEntry']['cftime'], dtype=float)
-    rs = np.array(replay_msl_file_df['stepCountEntry']['movementStats']['walkingVariable01'], dtype=float)
 
     # Adjust timestamps
-    min_t = min(st[0], rt[0])
     st = st - st[0]
     rt = rt - rt[0]
 
-    # -------------------- Cumulative distance ----------------
-    sd = np.array(in_system_df['stepCountEntry']['distance'], dtype=float)
-    rd = np.array(replay_msl_file_df['stepCountEntry']['distance'], dtype=float)
+    # -------------------- Prepare data for Cumulative distance ----------------
+    x = np.array(in_system_df['workoutRecorderAccel']['super']['x'], dtype=float)
+    y = np.array(replay_msl_file_df['workoutRecorderAccel']['super']['y'], dtype=float)
+    z = np.array(replay_msl_file_df['workoutRecorderAccel']['super']['z'], dtype=float)
 
     # Adjust for initial distance in in-system as distance is cumulatively reported in MSL
-    min_sd = min(sd)
-    sd = sd - min_sd
+    sd = sd - min(sd)
 
-    # Adjust for initial distance in replay as distance is cumulatively reported in MSL
-    min_rd = min(rd)
-    rd = rd - min_rd
-
-    # --------------- Iterative distance -------------------
-    sd_diffs = []
-    prev_value = None
-    for x in np.nditer(sd):
-        sd_diffs.append(0 if prev_value is None else x - prev_value)
-        prev_value = x
-
-    rd_diffs = []
-    prev_value = None
-    for x in np.nditer(rd):
-        rd_diffs.append(0 if prev_value is None else x - prev_value)
-        prev_value = x
+    # -------------------Prepare data for 'Accel' -----------
+    accel_t = np.array(in_system_accel["cftime"])
+    accel_x = np.array(in_system_accel['x'])
+    accel_y = np.array(in_system_accel['y'])
+    accel_z = np.array(in_system_accel['z'])
 
     # =====  Draw all the plots ================================
-    fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(15, 12))
+    fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(15, 12))
     fig.suptitle("Pedometer MSL replay", fontsize=14, fontweight="bold")
     fig.subplots_adjust(hspace=0.5)
+    st_min, st_max = min(st), max(st)
+    rt_min, rt_max = min(rt), max(rt)
+    st = st - min(st)
+    rt = rt - min(rt)
+    accel_t = accel_t - min(accel_t)
+    x_min, x_max = min(st_min, rt_min), max(st_max, rt_max)
+    accel_t_min, accel_t_max = min(accel_t), max(accel_t)
 
-    # -- Walking speed --
+    # --- Accel -----
     axes[0].set_xlabel('Seconds', fontsize=12)
-    axes[0].set_ylabel('Meters/Sec', fontsize=12)
-    axes[0].set_title('IPM Walking Speed: In-System vs. Replay', fontsize=12, fontweight="bold")
-    axes[0].scatter(st, ss, color="blue", s=3, label='In System')
-    axes[0].scatter(rt, rs, color="red", s=3, label='Replay')
+    axes[0].set_ylabel('In System Accel', fontsize=12)
+    axes[0].set_xlim(x_min, x_max)
+    axes[0].scatter(accel_t, accel_x, color="blue", s=3, label='x')
+    axes[0].scatter(accel_t, accel_y, color="red", s=3, label='y')
+    axes[0].scatter(accel_t, accel_z, color="green", s=3, label='z')
+    axes[0].set_title('In System Accel', fontsize=12, fontweight="bold")
+    axes[0].legend(loc="upper left")
 
-    # -- Cumulative distance --
-    axes[1].set_xlabel('Seconds', fontsize=12)
-    axes[1].set_ylabel('Distance', fontsize=12)
-    axes[1].set_title('Cumulative Distance: In-System vs. Replay', fontsize=12, fontweight="bold")
-    axes[1].scatter(st, sd, color="blue", s=3, label='In System')
-    axes[1].scatter(rt, rd, color="red", s=3, label='Replay')
-
-    # --- Iterative Distance ------
-    axes[2].set_xlabel('Seconds', fontsize=12)
-    axes[2].set_ylabel('Distance per step', fontsize=12)
-    axes[2].set_title('Iterative Distance: In-System vs. Replay', fontsize=12, fontweight="bold")
-    axes[2].scatter(st, sd_diffs, color="blue", s=3, label='In System')
-    axes[2].scatter(rt, rd_diffs, color="red", s=3, label='Replay')
-
-    fig.savefig("/tmp/pedometer_replay.jpeg")
+    fig.savefig(args.output_chart_path)
