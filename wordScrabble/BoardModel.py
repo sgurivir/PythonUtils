@@ -13,7 +13,7 @@ class Tile:
 
 
 class BoardModel:
-    SIZE_OF_BOARD = 10
+    SIZE_OF_BOARD = 9
     MAX_WORD_LENGTH = 5
     NUM_WORDS = 6
     MAX_COMMON_LETTERS = 3
@@ -44,7 +44,7 @@ class BoardModel:
 
     def find_boxes_to_fill(self):
 
-        find_row_or_column = True  # true for row, false for column
+        find_row_or_column = False  # true for row, false for column
         rows_filled = []
         columns_filled = []
         start_index_for_row = {}
@@ -74,52 +74,45 @@ class BoardModel:
                     beg = r * self.size
                     end = (r+1) * self.size - 1
 
-                    if self.sum_beg_end(beg, end) < BoardModel.MAX_COMMON_LETTERS:
-                        c = random.randint(1, self.size - length_of_word -2)
+                    if self.sum_beg_end(beg, end) >= BoardModel.MAX_COMMON_LETTERS:
+                        continue
+                    c = random.randint(1, self.size - length_of_word -2)
 
-                        # words can only start in even rows
-                        if c % 2 == 1:
-                            c = c - 1
+                    # words can only start in even rows
+                    if c % 2 == 1:
+                        c = c - 1
 
-                        self.tiles[beg + c: beg + c + length_of_word] = [1] * length_of_word
-                        found_word_in_this_iteration = True
-                        rows_filled.append(r)
-                        start_index_for_row[r] = c
-                        break
-                    if found_word_in_this_iteration:
-                        break
+                    self.tiles[beg + c: beg + c + length_of_word] = [1] * length_of_word
+                    found_word_in_this_iteration = True
+                    rows_filled.append(r)
+                    start_index_for_row[r] = c
+                    break
 
-                if found_word_in_this_iteration:
-                    print("Found row: {}".format(start_index_for_row))
-                    continue
             else:
                 starting_column_to_search = random.randint(0, self.size-1)
-                for c_ in range(starting_column_to_search, self.size + starting_column_to_search-1):
-                    c = c_ % self.size
-
+                for c_ in range(starting_column_to_search, self.size + starting_column_to_search):
                     # words can only start in even columns
-                    if c % 2 == 1:
-                        continue
+                    if c_ % 2 == 1:
+                        c_ = c_ + 1
+                    c = c_ % self.size
 
                     if start_index_for_column.keys().__contains__(c):
                         continue
 
+                    r = random.randint(0, self.size - length_of_word)
                     sum = 0
-                    for r in range(0, self.size - length_of_word):
-                        sum = sum + self.tiles[r*self.size + c]
+                    for k in range(r, length_of_word):
+                        sum = sum + self.tiles[k*self.size + c]
+                    #print("Sum: {} for c: {} and r:{}".format(sum, c, r))
 
-                    if sum <= BoardModel.MAX_COMMON_LETTERS and sum >= BoardModel.MIN_COMMON_LETTERS:
-                        for r in range(r, r + length_of_word):
-                            self.tiles[r * self.size + c] = 1
+                    if sum <= BoardModel.MAX_COMMON_LETTERS:
+                        for k in range(0, length_of_word):
+                            self.tiles[(r+k) * self.size + c] = 1
                         found_word_in_this_iteration = True
 
                         columns_filled.append(c)
                         start_index_for_column[c] = r
                         break
-                if found_word_in_this_iteration:
-                    print("Found Column: {}".format(start_index_for_column))
-                    continue
-
 
 
 if __name__ == '__main__':
