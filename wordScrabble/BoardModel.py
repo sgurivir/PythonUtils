@@ -1,5 +1,6 @@
 import glob
 import os
+import pickle
 import random
 
 
@@ -115,7 +116,19 @@ class BoardModel:
                         break
 
 
+def load_thesarus(path):
+    with open(thesaurus_path, 'rb') as t:
+        all_words = pickle.load(t)
+        words = {}
+        for word_length in range(3, BoardModel.MAX_WORD_LENGTH + 1):
+            words[word_length] = list(filter(lambda w: len(w) == word_length, all_words))
+        return words
+
+
 if __name__ == '__main__':
     board = BoardModel()
     board.find_boxes_to_fill()
     board.dump()
+
+    thesaurus_path = "/Users/sgurivireddy/my_src/PythonUtils/wordScrabble/output/Board_Dictionary"
+    words = load_thesarus(thesaurus_path)
