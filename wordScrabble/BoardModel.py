@@ -5,12 +5,12 @@ import random
 
 
 class Tile:
-    def __init__(self, value, is_found):
+    def __init__(self, value, is_hidden=True):
         self.value = value
-        self.is_found = is_found
+        self.is_hidden = is_hidden
 
     def dump(self):
-        print("{}, {}".format(self.value, self.is_found))
+        print("{}, {}".format(self.value, self.is_hidden))
 
 
 class BoardModel:
@@ -119,14 +119,47 @@ class BoardModel:
                         self.length_of_word_for_column[c] = length_of_word
                         break
 
+    def place_letters(self, words):
+        # Fill rows first
+        for row in self.self.start_index_for_row.keys():
+            length_of_word = self.length_of_word_for_row(row)
+            #
+            pass
 
-def load_thesaurus(path):
-    with open(thesaurus_path, 'rb') as t:
-        all_words = pickle.load(t)
-        words = {}
+
+class Thesarus:
+
+    def __init__(self):
+        self.path = "/Users/sgurivireddy/my_src/PythonUtils/wordScrabble/output/Board_Dictionary"
+        self.all_words = []
+        self.words = {}
+        self.load_thesaurus()
+
+    def load_thesaurus(self):
+        with open(self.path, 'rb') as t:
+            self.all_words = pickle.load(t)
+
+    def find_words(self, letters):
+        """
+        path: Path to Thesarus
+        letters: letters to choose from
+        """
+        letters = sorted(letters)
+        words_with_letters = {}
+
         for word_length in range(3, BoardModel.MAX_WORD_LENGTH + 1):
-            words[word_length] = list(filter(lambda w: len(w) == word_length, all_words))
-        return words
+            words_with_length = list(filter(lambda w: len(w) == word_length, self.all_words))
+            words_with_letters[word_length] = []
+
+            for word in words_with_length:
+                word_letters = []
+                for c in word:
+                    word_letters.append(c)
+
+                if set(word_letters).issubset(letters):
+                    words_with_letters[word_length].append(word)
+
+        self.words = words_with_letters
 
 
 if __name__ == '__main__':
@@ -134,6 +167,7 @@ if __name__ == '__main__':
     board.find_boxes_to_fill()
     board.dump()
 
-    thesaurus_path = "/Users/sgurivireddy/my_src/PythonUtils/wordScrabble/output/Board_Dictionary"
-    words = load_thesaurus(thesaurus_path)
+    thesarus = Thesarus()
+    thesarus.find_words("baysaws")
+    print(thesarus.words)
 

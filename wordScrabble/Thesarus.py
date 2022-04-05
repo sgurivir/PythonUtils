@@ -2,7 +2,10 @@ import glob
 import os
 import pickle
 import random
+import sys
+
 from textblob import TextBlob
+
 
 class ThesarusGenerator:
     def __init__(self, directory, out_directory):
@@ -86,6 +89,12 @@ class ThesarusGenerator:
         corrected_words = map(lambda x: str(TextBlob(x).correct()), keys_dictionary.keys())
         return list(corrected_words)
 
+    def find_five_letter_combinations(self, all_words):
+        five_letter_words = list(filter(lambda x : len(x) == 5, all_words))
+        three_or_four_letter_words = list(filter(lambda x : len(x) == 3 or len(x) == 4, all_words))
+        print(five_letter_words)
+        print(three_or_four_letter_words)
+
 
 if __name__ == '__main__':
     thesarus = ThesarusGenerator(directory="/Users/sgurivireddy/my_src/PythonUtils/wordScrabble/input/",
@@ -95,11 +104,13 @@ if __name__ == '__main__':
                                        min_frequency=2,
                                        max_frequency=40)
 
+    thesarus.find_five_letter_combinations(words)
+    words = []
+
     out_file_path = "/Users/sgurivireddy/my_src/PythonUtils/wordScrabble/output/Board_Dictionary"
     with open(out_file_path, 'wb') as t_:
         pickle.dump(words, t_)
 
-    words = []
     with open(out_file_path, 'rb') as temp:
         words = pickle.load(temp)
         print(words)

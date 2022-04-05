@@ -1,0 +1,22 @@
+
+Words are categorized into files
+================================
+3.txt
+4.txt
+5.txt
+6.txt
+7.txt...
+
+Each file has words based on their length
+=========================================
+about
+
+To generate those files
+========================
+3_processed.txt 3_uniq_files.txt
+4_processed.txt 4_uniq_files.txt
+
+3_processed.txt is a dict {word : count}
+3_uniq_files.txt is a dict {word: set<files>}
+
+Scan one file at a time and add wor
