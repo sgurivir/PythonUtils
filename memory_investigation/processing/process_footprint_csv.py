@@ -121,7 +121,7 @@ def plot_timestamp_to_footprint(timestamps_,
 
     axes.set_title('Footprint over time', fontsize=12, fontweight="bold")
     axes.set_xlabel('Timestamp', fontsize=6)
-    axes.set_ylabel('Footprint', fontsize=8)
+    axes.set_ylabel('Footprint (MB)', fontsize=8)
 
     plt.tight_layout()
 
@@ -133,54 +133,68 @@ def plot_timestamp_to_footprint(timestamps_,
     plt.plot(x_points, y3_points, color="orange", label="bytes_allocated")
 
     # Plot horizontal lines for locationd's Jetsam limits (inactive & active)
-    plt.axhline(y=26, color='y', linestyle='dotted')
-    plt.axhline(y=34, color='r', linestyle='dotted')
+    plt.axhline(y=26, color='y', linestyle='dotted', label="INACTIVE_LIMIT")
+    plt.axhline(y=34, color='r', linestyle='dotted', label="ACTIVE_LIMIT")
 
     # Calculte approximate duration between timestamps
     duration = 5
     if len(timestamps_) >=2:
         duration = timestamps_[1] - timestamps_[0]
 
+    # Set range for y-axis
+    max_y = 38
+    plt.ylim(top=max_y)
+
     # Plot vertical lines where no transactions were taken
     for no_transaction_timestamp in timestamps_with_no_transactions_:
-        axes.axvspan(no_transaction_timestamp-duration,
+        axes.axvspan(no_transaction_timestamp-duration/2,  # divided by 2, because we dont know when it started
                      no_transaction_timestamp,
                      alpha=0.2)
 
+    # Show legend
+    plt.legend(loc="center left", bbox_to_anchor = (1, 0.5))
 
-    plt.legend(loc="upper left")
-    plt.savefig(out_path, dpi=200)
+    plt.savefig(out_path, dpi=200, bbox_inches='tight')
     plt.clf()
 
 
 
-def plot_uptimes_to_bytes_lost_to_fragmentation(uptimes_,
-                                                bytes_lost_to_fragmentation,
-                                                out_path):
+def plot_timestamp_to_bytes_lost_to_fragmentation(timestamps_,
+                                                  bytes_lost_to_fragmentation,
+                                                  out_path):
     """
-    uptimes: array of uptimes of locationd
+    timestamps_: array of cftimes
     bytes_lost_to_fragmentation: array of footprints measured at the timestamps
     out_path: path to file where plot should be written to
     """
-    uptimes_hours = [TimeUtil.convert_human_readbale_duration_to_hours(t) for t in uptimes_]
+    def x_tick_formatter(x, y):
+        return TimeUtil.cftime_to_date(x, format="MM/DD HH:mm")
+
+
     bytes_lost_MB = [b/1000 for b in bytes_lost_to_fragmentation]
-    x_points = np.array(uptimes_hours)
-    y1_points = np.array(bytes_lost_MB)
+    x_points = np.array(timestamps_)
+    y_points = np.array(bytes_lost_MB)
 
     axes = plt.axes()
+    axes.xaxis.set_major_formatter(
+        plt.FuncFormatter(x_tick_formatter))
+    axes.set_title('Bytes lost to fragmentation', fontsize=12, fontweight="bold")
+    axes.set_xlabel('Timestamp', fontsize=6)
+    axes.set_ylabel('Bytes lost (MB)', fontsize=8)
+    axes.grid(axis='y')
 
     plt.xticks(rotation='vertical')
     plt.xticks(fontsize=8, rotation=60)
 
-    axes.set_title('Bytes lost to fragmentation', fontsize=12, fontweight="bold")
-    axes.set_xlabel('Uptime of locationd (Hours)', fontsize=6)
-    axes.set_ylabel('Bytes lost (MB)', fontsize=8)
-    axes.grid(axis='y')
+    # Set range for y-axis
+    max_y = np.max(y_points) * 1.1
+    min_y = np.min(y_points) * 0.9
+    axes.set_ylim([min_y, max_y])
 
     #plt.tight_layout()
-    plt.plot(x_points, y1_points, color="blue", label="Bytes lost (MB)")
+    plt.plot(x_points, y_points, color="blue", label="Bytes lost (MB)")
 
-    plt.legend(loc="upper left")
+    #plt.legend(loc="upper left")
     plt.savefig(out_path, dpi=200)
     plt.clf()
 
@@ -214,11 +228,80 @@ def plot_timestamp_to_allocation_count(timestamps_,
     axes.set_xlabel('Timestamp', fontsize=6)
     axes.set_ylabel('Allocation Count', fontsize=8)
 
+    # Set range for y-axis
+    max_y = np.max(y_points) * 1.1
+    min_y = np.min(y_points) * 0.9
+    axes.set_ylim([min_y, max_y])
+
     #plt.tight_layout()
     plt.plot(x_points, y_points, color="blue", label="allocation count")
 
+    # Calculate approximate duration between timestamps
+    duration = 5
+    if len(timestamps_) >=2:
+        duration = timestamps_[1] - timestamps_[0]
+
+    # Plot vertical lines where no transactions were taken
+    for no_transaction_timestamp in timestamps_with_no_transactions_:
+        axes.axvspan(no_transaction_timestamp-duration/2,  # divided by 2, because we dont know when it started
+                     no_transaction_timestamp,
+                     alpha=0.2)
 
     plt.legend(loc="upper left")
+    plt.savefig(out_path, dpi=200)
+    plt.clf()
+
+
+def plot_timestamp_to_footprint_minus_malloc(timestamps_,
+                                             footprint_minus_malloc_,
+                                             timestamps_with_no_transactions_,
+                                             out_path):
+    """
+    timestamps_: array of timestamps
+    footprint_minus_malloc_: array of size counted against footprint, not coming from malloc regions
+    timestamps_with_no_transactions_: Timestamps at which no os_transactions were taken
+    out_path: path to file where plot should be written to
+    """
+
+    def x_tick_formatter(x, y):
+        return TimeUtil.cftime_to_date(x, format="MM/DD HH:mm")
+
+    x_points = np.array(timestamps_)
+    y_points = np.array(footprint_minus_malloc_) / 1000 # Convert to MB
+
+
+    axes = plt.axes()
+    axes.grid(axis='y')
+    axes.xaxis.set_major_formatter(
+        plt.FuncFormatter(x_tick_formatter))
+
+    plt.xticks(rotation='vertical')
+    plt.xticks(fontsize=8, rotation=60)
+
+    axes.set_title('Footprint minus malloc (MB)', fontsize=12, fontweight="bold")
+    axes.set_xlabel('Timestamp', fontsize=6)
+    axes.set_ylabel('Footprint minus Malloc (MB)', fontsize=8)
+
+    # Set range for y-axis
+    max_y = np.max(y_points) * 1.1
+    min_y = np.min(y_points) * 0.9
+    axes.set_ylim([min_y, max_y])
+
+    #plt.tight_layout()
+    plt.plot(x_points, y_points, color="blue", label="Footprint minus malloc (MB)")
+
+    # Calculate approximate duration between timestamps
+    duration = 5
+    if len(timestamps_) >=2:
+        duration = timestamps_[1] - timestamps_[0]
+
+    # Plot vertical lines where no transactions were taken
+    for no_transaction_timestamp in timestamps_with_no_transactions_:
+        axes.axvspan(no_transaction_timestamp-duration/2,  # divided by 2, because we dont know when it started
+                     no_transaction_timestamp,
+                     alpha=0.2)
+
+    #plt.legend(loc="upper left")
     plt.savefig(out_path, dpi=200)
     plt.clf()
 
@@ -258,6 +341,7 @@ if __name__ == '__main__':
     out_path_to_footprint_plot = os.path.join(out_dir, "footprint_plot.png")
     out_path_to_fragmentation_plot = os.path.join(out_dir, "fragmentation_plot.png")
     out_path_to_allocation_count_plot = os.path.join(out_dir, "allocation_counts.png")
+    out_path_to_footprint_minus_malloc_plot = os.path.join(out_dir, "footprint_minus_malloc.png")
 
     # Calculate
     max_active_footprint = 0
@@ -280,6 +364,7 @@ if __name__ == '__main__':
     allocation_count_samples = []
     fragmentation_samples = []
     bytes_lost_to_fragmentation_samples = []
+    footprint_minus_malloc_samples = []
     dirty_size_samples = []
     num_os_transactions_samples = []
     pids = []
@@ -302,6 +387,7 @@ if __name__ == '__main__':
                 fragmentation = float(row["fragmentation"].strip().replace('%', ''))
                 if "bytes_lost_to_fragmentation" in row:
                     bytes_lost_to_fragmentation = int(row["bytes_lost_to_fragmentation"].strip().replace('K', ''))
+                footprint_minus_malloc = int(row["non_malloc_section"])
                 num_os_transactions = int(row["num_os_transactions"].strip())
                 pid = row["pid_of_locationd"].strip()
                 uptime = row["uptime_locationd"].strip()
@@ -317,6 +403,7 @@ if __name__ == '__main__':
             bytes_allocated_samples.append(bytes_allocated)
             fragmentation_samples.append(fragmentation)
             allocation_count_samples.append(allocation_count)
+            footprint_minus_malloc_samples.append(footprint_minus_malloc)
             bytes_lost_to_fragmentation_samples.append(bytes_lost_to_fragmentation)
             num_os_transactions_samples.append(num_os_transactions)
             dirty_size_samples.append(dirty_size)
@@ -392,9 +479,14 @@ if __name__ == '__main__':
                                        timestamps_with_no_transactions_=timestamps_with_no_transactions,
                                        out_path=out_path_to_allocation_count_plot)
 
-    plot_uptimes_to_bytes_lost_to_fragmentation(uptimes_=uptimes,
-                                                bytes_lost_to_fragmentation=bytes_lost_to_fragmentation_samples,
-                                                out_path=out_path_to_fragmentation_plot)
+    plot_timestamp_to_bytes_lost_to_fragmentation(timestamps_=timestamps,
+                                                  bytes_lost_to_fragmentation=bytes_lost_to_fragmentation_samples,
+                                                  out_path=out_path_to_fragmentation_plot)
+
+    plot_timestamp_to_footprint_minus_malloc(timestamps_=timestamps,
+                                             footprint_minus_malloc_=footprint_minus_malloc_samples,
+                                             timestamps_with_no_transactions_=timestamps_with_no_transactions,
+                                             out_path=out_path_to_footprint_minus_malloc_plot)
 
     # Copy HTML to output directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
