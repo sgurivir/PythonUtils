@@ -17,86 +17,7 @@ To investigate new memory growth areas in S, we need to diff  heap_diff_A.txt an
 import argparse
 import os
 
-
-class HeapObjectAndCounts:
-    def __init__(self,
-                 class_name,
-                 object_type,
-                 object_count,
-                 total_bytes,
-                 avg_size,
-                 binary_name):
-        self.class_name = class_name
-        self.object_type = object_type
-        self.object_count = object_count
-        self.total_bytes = total_bytes
-        self.avg_size = avg_size
-        self.binary_name = binary_name
-
-    @staticmethod
-    def generate_from(line_in_heap_diff):
-        """
-        :param line_in_heap_diff:  text line in heap diff
-        :return: An tuple of [object_type: HeapObjectAndCounts]
-        """
-
-        # Parse a string like
-        #  17      55424    3260.2   _NSCallStackArray._frames (malloc[])              C       Foundation
-
-        # Remove extra spaces
-        line_in_heap_diff = " ".join(line_in_heap_diff.split())
-
-        tokens = line_in_heap_diff.split(" ")
-        if len(tokens) < 5:
-            if not line_in_heap_diff.isspace():
-                print("Ignoring line {}".format(line_in_heap_diff))
-            return None
-
-        object_count = tokens[0]
-        total_bytes = tokens[1]
-        avg_size = tokens[2]
-        binary_name = tokens[-1]
-        object_type = tokens[-2]
-        class_name = "".join(tokens[3:-2])
-
-        h = HeapObjectAndCounts(class_name=class_name,
-                                object_type=object_type,
-                                object_count=object_count,
-                                total_bytes=total_bytes,
-                                avg_size=avg_size,
-                                binary_name=binary_name)
-
-        return h
-
-
-def count_of_objects_from_heap_diff(path):
-    """
-    :param path: Path to heap diff file
-    :return: A dictionary of [Object_type: HeapObjectAndCounts]
-    """
-    object_type_and_counts = {}  # Dictionary of [String: HeapObjectAndCounts]
-
-    with open(path, 'r') as f:
-        # Keep reading until we find line with ==="
-        line_underscored_before_metrics_found = False
-
-        line = f.readline()
-        while line:
-            if "====" in line:
-                line_underscored_before_metrics_found = True
-                break
-            line = f.readline()
-
-        if line_underscored_before_metrics_found:
-            line = f.readline()
-            while line:
-                counts = HeapObjectAndCounts.generate_from(line)
-                if object_type is not None:
-                    object_type_and_counts[counts.object_type] = counts
-                line = f.readline()
-        f.close()
-
-    return object_type_and_counts
+from HeapCommon import HeapObjectAndCountGenerator
 
 
 def diff_object_counts(baseline,
@@ -113,17 +34,21 @@ def diff_object_counts(baseline,
 
     for object_type in target.keys():
         target_count = target.get(object_type).object_count
+        target_bytes = target.get(object_type).total_bytes
         baseline_counts = baseline.get(object_type, None)
+
+        baseline_count = 0
+        baseline_size = 0
         if baseline_counts:
             baseline_count = baseline_counts.object_count
-        else:
-            baseline_count = 0
+            baseline_size = baseline_counts.total_bytes
 
         diff_counts[object_type] = {"target": target_count,
                                     "baseline_count": baseline_count,
-                                    "diff": int(target_count) - int(baseline_count)}
+                                    "diff_count": int(target_count) - int(baseline_count),
+                                    "diff_bytes": int(target_bytes) - int(baseline_size)}
 
-    return sorted(diff_counts.items(), key=lambda x: x[1]["diff"], reverse=True)
+    return sorted(diff_counts.items(), key=lambda x: x[1]["diff_bytes"], reverse=True)
 
 
 if __name__ == '__main__':
@@ -151,34 +76,44 @@ if __name__ == '__main__':
         '--output',
         '-o',
         dest="out_path",
-        default="/tmp/heap_diff_second_derivative.txt",
+        default="/tmp/heap_diff.csv",
         required=False,
-        help="Output path where heap difference growth between two releases will be generated")
+        help="Output path where heap diff will be generated")
 
     # Validate input
     args = parser.parse_args()
     if not os.path.isfile(args.baseline_heap_diff):
-        raise Exception("Invalid Baseline provided : {}".format(args.baseline_heap_diff))
+        print("Invalid Baseline provided : {}".format(args.baseline_heap_diff))
+        sys.exit(-1)
 
     if not os.path.isfile(args.target_heap_diff):
-        raise Exception("Invalid target provided : {}".format(args.target_heap_diff))
+        print("Invalid target provided : {}".format(args.target_heap_diff))
+        sys.exit(-1)
 
     # Parse two heap_diffs
-    baseline_object_counts = count_of_objects_from_heap_diff(path=args.baseline_heap_diff)
+    baseline_object_counts = HeapObjectAndCountGenerator.generate_from_heap(path=args.baseline_heap_diff)
     if len(baseline_object_counts) == 0:
         sys.exit("Heap diff at {} could not be parsed".format(args.baseline_heap_diff))
 
-    target_object_counts = count_of_objects_from_heap_diff(path=args.target_heap_diff)
+    target_object_counts = HeapObjectAndCountGenerator.generate_from_heap(path=args.target_heap_diff)
     if len(target_object_counts) == 0:
         sys.exit("Heap diff at {} could not be parsed".format(args.baseline_heap_diff))
 
     # Diff heap_diffs (second derivative)
     diff_counts = diff_object_counts(baseline=baseline_object_counts,
                                      target=target_object_counts)
-    for t in diff_counts:
-        class_name = t[0]  # Class name
-        object_counts = t[1]  # Counts
-        print("{}, {}, {}, {}".format(object_counts["diff"],
-                                      object_counts["baseline_count"],
-                                      object_counts["target"],
-                                      class_name))
+
+    with open(args.out_path, "w") as f_:
+        for t in diff_counts:
+            class_name = t[0]  # Class name
+            object_counts = t[1]  # Counts
+
+            if object_counts["diff_count"] != 0:
+                f_.write("{}, {}, {}, {}, {}\n".format(class_name,
+                                                       object_counts["diff_count"],
+                                                       object_counts["diff_bytes"],
+                                                       object_counts["baseline_count"],
+                                                       object_counts["target"]))
+        f_.close()
+
+        print(f"Output CSV created at: {args.out_path}")

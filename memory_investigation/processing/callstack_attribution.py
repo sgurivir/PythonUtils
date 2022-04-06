@@ -13,64 +13,7 @@ import glob
 import os
 import sys
 
-
-def sorted_memgraphs_in_dir(path):
-    """
-    returns a list of memgraphs found in provided directory
-    :param(path): directory to search memgraph files
-    :return: Paths to memgraphs, sorted in canonical order
-    """
-    memgraphs = glob.glob(path + '/*.memgraph', recursive=False)
-
-    if len(memgraphs) == 0:
-        sys.exit(f"No memgraphs found in provided directory {path}")
-
-    memgraphs.sort()
-    return memgraphs
-
-
-def get_paths_to_memgraphs(file_or_directory):
-    """
-    Enumerate memgraphs in a directory
-    """
-    if not os.path.exists(file_or_directory):
-        sys.exit(f"Path provided does not exist : {file_or_directory}")
-
-    if os.path.isfile(file_or_directory):
-        return [file_or_directory]
-
-    if os.path.isdir(file_or_directory):
-        memgraphs = sorted_memgraphs_in_dir(file_or_directory)
-
-        if len(memgraphs) == 0:
-            sys.exit(f"No memgraphs found in directory provided : {file_or_directory}")
-
-        return memgraphs
-
-    return []
-
-
-def pick_memgraphs(paths_to_memgraphs):
-    """
-    If we have more than two memgraphs, pick two which would best fit for analysis.
-
-    We need two memgraphs to do a diff of heaps. For the first one, we pick memgraph at
-    around 20% of time (based on count). Then we pick the last memgraph.
-
-    We do it this way because we need to give locationd some time to warm up and fillup
-    all the caches.
-    """
-    num_memgraphs = len(paths_to_memgraphs)
-
-    if num_memgraphs <= 1:
-        sys.exit(f"Too few memgraphs {num_memgraphs}. Can't investigate growth")
-
-    first = paths_to_memgraphs[0]
-    twentieth_percentile = int(0.2 * num_memgraphs)
-    if num_memgraphs >= 4:
-        first = paths_to_memgraphs[twentieth_percentile]
-
-    return first, paths_to_memgraphs[-1]
+from FileSystemUtil import FileSystemUtil
 
 
 def generate_callstack_attribution(memgraph1,
@@ -143,11 +86,12 @@ if __name__ == '__main__':
         sys.exit(-1)
 
     print("\n========= Collecting memgraph(s) =====")
-    input_memgraphs = get_paths_to_memgraphs(args.memgraphs_dir)
+    input_memgraphs = FileSystemUtil.get_paths_to_memgraphs(args.memgraphs_dir)
     print("{}".format("\n".join(input_memgraphs)))
 
     print("\n========= Picking memgraph(s) ======")
-    first_memgraph, last_memgraph = pick_memgraphs(paths_to_memgraphs=input_memgraphs)
+    first_memgraph, last_memgraph = FileSystemUtil.pick_two_memgraphs(paths_to_memgraphs=input_memgraphs,
+                                                                      skip_first_if_more_than_two=True)
     print(f"Picked for analysis: \n\t {first_memgraph} and \n\t {last_memgraph}")
 
     print(f"\n========= Generating callstack attribution for Object {args.object_type} ======")

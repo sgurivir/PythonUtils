@@ -6,42 +6,10 @@ This script analyzes generates a memtrend from a series of memgraphs for daemon.
 """
 
 import argparse
-import glob
 import os
-import subprocess
-import re
 
-
-def sorted_memgraphs_in_dir(path):
-    """
-    returns a list of memgraphs found in provided directory
-    :param(path): directory to search memgraph files
-    :return:
-    """
-    memgraphs = glob.glob(path + '/*.memgraph', recursive=False)
-
-    if len(memgraphs) == 0:
-        raise Exception("No memgraphs found in provided direcory {path}")
-
-    memgraphs.sort()
-
-    return memgraphs
-
-
-def footprint_of_memgraph(path_to_memgraph):
-    """
-    returns footprint from memgraph
-    :param path_to_memgraph: Path to memgraph
-    :return:
-    """
-    p1 = subprocess.Popen(["footprint", path_to_memgraph], stdout=subprocess.PIPE)
-    p2 = subprocess.Popen(["grep", "phys_footprint: "], stdin=p1.stdout, stdout=subprocess.PIPE)
-    footprint = p2.communicate()[0].decode("utf-8")
-
-    footprint = footprint.replace("phys_footprint: ", "")
-    footprint = footprint.replace("\n", "")
-    footprint = footprint.replace("\t", "")
-    return footprint
+from FileSystemUtil import FileSystemUtil
+from MemgraphUtil import MemgraphUtil
 
 
 if __name__ == '__main__':
@@ -67,11 +35,11 @@ if __name__ == '__main__':
         raise Exception("Invalid directory provided : {args.memgraphs_dir}")
 
     # List memgraphs in provided directory
-    memgraphs = sorted_memgraphs_in_dir(args.memgraphs_dir)
+    memgraphs = FileSystemUtil.get_paths_to_memgraphs(args.memgraphs_dir)
 
     footprints = []
     for memgraph in memgraphs:
-        footprints.append( footprint_of_memgraph(memgraph) )
+        footprints.append( MemgraphUtil.footprint_for(memgraph) )
 
     print(footprints)
     print("Footprint of process changed from {} to {}".format(footprints[0], footprints[-1]))
