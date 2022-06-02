@@ -1,8 +1,9 @@
 import argparse
+import os.path
+
 import arrow
 import csv
-import os
-import subprocess
+import shutil
 import sys
 
 import pandas as pd
@@ -40,23 +41,76 @@ class TimeUtil:
             cfTime +
             NSTIMEINTERVALSINCE1970).to('US/Pacific').format(format)
 
+    @staticmethod
+    def convert_human_readbale_duration_to_hours(duration):
+        """
+        Converts duration reported by PS uptime (format: 01-00:00:53) to minutes
+        :param duration:
+        :return:
+        """
+        duration = duration.strip()
+        count_of_colons = duration.count(":")
 
-def plot_timestamp_to_footprint(timestamps,
-                                footprints,
-                                restart_timestamps,
+        if count_of_colons == 0:
+            return float(int(duration))/3600   # convert seconds to hours
+        if count_of_colons == 1:
+            tokens = duration.split(":")
+            return int(tokens[0])/60 + int(tokens[1])/3600
+        if count_of_colons == 2:
+            count_of_hyphens = duration.count("-")
+            if count_of_hyphens == 0:
+                tokens = duration.split(":")
+                return int(tokens[0]) + int(tokens[1])/60 + float(int(tokens[2]))/3600
+            else:
+                tokens = duration.split("-")
+                return int(tokens[0]) * 24 + TimeUtil.convert_human_readbale_duration_to_hours(tokens[1])
+
+        raise Exception(f"Could not parse duration string: {duration}")
+
+def timestamps_with_zero_transactions(timestamps_,
+                                      pids_,
+                                      num_os_transactions_):
+    """
+    Find indices in num_os_transactions_, which have zero transacations, and then return
+    timestamps at those indices.
+
+    :param timestamps_:
+    :param pids_:
+    :param num_os_transactions_:
+    :return:
+    """
+    num_os_transactions_np_ = np.array(num_os_transactions_)
+
+    # Get indices with zero value
+    zero_indices = np.where(num_os_transactions_np_ == 0)
+
+    # Return elements in timestamps_ at the indices
+    return [timestamps_[i] for i in list(zero_indices[0])]
+
+
+def plot_timestamp_to_footprint(timestamps_,
+                                footprints_,
+                                bytes_allocated_,
+                                dirty_size_samples_,
+                                timestamps_with_no_transactions_,
                                 out_path):
     """
     timestamps: array of CFAbsoluteTimes
     footprints: array of footprints measured at the timestamps
+    bytes_allocated: array of bytes allocated reported by vmstat at the timestamps
+    dirty_size_samples_: array of dirty_size reported by footprint
     restart_timestamps: array of CFAbsoluteTimes, when process restarted
+    timestamps_with_no_transactions_: Timestamps at which no os_transaction is taken
     out_path: path to file where plot should be written to
     """
 
     def x_tick_formatter(x, y):
         return TimeUtil.cftime_to_date(x, format="MM/DD HH:mm")
 
-    x_points = np.array(timestamps)
-    y_points = np.array(footprints)
+    x_points = np.array(timestamps_)
+    y1_points = np.array(footprints_)
+    y2_points = np.array(dirty_size_samples_)
+    y3_points = np.array(bytes_allocated_)
 
     axes = plt.axes()
     axes.xaxis.set_major_formatter(
@@ -67,14 +121,199 @@ def plot_timestamp_to_footprint(timestamps,
 
     axes.set_title('Footprint over time', fontsize=12, fontweight="bold")
     axes.set_xlabel('Timestamp', fontsize=6)
-    axes.set_ylabel('Footprint', fontsize=8)
+    axes.set_ylabel('Footprint (MB)', fontsize=8)
 
     plt.tight_layout()
-    plt.axhline(y=26, color='y', label='inactive', linestyle='dotted')
-    plt.axhline(y=34, color='r', label='active', linestyle='dotted')
 
-    plt.plot(x_points, y_points)
-    plt.savefig(out_path)
+    plt.plot(x_points, y1_points, color="blue", label="footprint")
+    plt.plot(x_points, y2_points, color="brown", label="dirty_size")
+    plt.plot(x_points, y3_points, color="orange", label="bytes_allocated")
+
+    # Plot horizontal lines for locationd's Jetsam limits (inactive & active)
+    plt.axhline(y=26, color='y', linestyle='dotted', label="INACTIVE_LIMIT")
+    plt.axhline(y=34, color='r', linestyle='dotted', label="ACTIVE_LIMIT")
+
+    # Calculte approximate duration between timestamps
+    duration = 5
+    if len(timestamps_) >=2:
+        duration = timestamps_[1] - timestamps_[0]
+
+    # Set range for y-axis
+    max_y = 38
+    plt.ylim(top=max_y)
+
+    # Plot vertical lines where no transactions were taken
+    for no_transaction_timestamp in timestamps_with_no_transactions_:
+        axes.axvspan(no_transaction_timestamp-duration/2,  # divided by 2, because we dont know when it started
+                     no_transaction_timestamp,
+                     alpha=0.2)
+
+    # Show legend
+    plt.legend(loc="center left", bbox_to_anchor = (1, 0.5))
+
+    plt.savefig(out_path, dpi=200, bbox_inches='tight')
+    plt.clf()
+
+
+
+def plot_timestamp_to_bytes_lost_to_fragmentation(timestamps_,
+                                                  bytes_lost_to_fragmentation,
+                                                  out_path):
+    """
+    timestamps_: array of cftimes
+    bytes_lost_to_fragmentation: array of footprints measured at the timestamps
+    out_path: path to file where plot should be written to
+    """
+    def x_tick_formatter(x, y):
+        return TimeUtil.cftime_to_date(x, format="MM/DD HH:mm")
+
+
+    bytes_lost_MB = [b/1000 for b in bytes_lost_to_fragmentation]
+    x_points = np.array(timestamps_)
+    y_points = np.array(bytes_lost_MB)
+
+    axes = plt.axes()
+    axes.xaxis.set_major_formatter(
+        plt.FuncFormatter(x_tick_formatter))
+    axes.set_title('Bytes lost to fragmentation', fontsize=12, fontweight="bold")
+    axes.set_xlabel('Timestamp', fontsize=6)
+    axes.set_ylabel('Bytes lost (MB)', fontsize=8)
+    axes.grid(axis='y')
+
+    plt.xticks(rotation='vertical')
+    plt.xticks(fontsize=8, rotation=60)
+
+    # Set range for y-axis
+    max_y = np.max(y_points) * 1.1
+    min_y = np.min(y_points) * 0.9
+    axes.set_ylim([min_y, max_y])
+
+    #plt.tight_layout()
+    plt.plot(x_points, y_points, color="blue", label="Bytes lost (MB)")
+
+    #plt.legend(loc="upper left")
+    plt.savefig(out_path, dpi=200)
+    plt.clf()
+
+
+def plot_timestamp_to_allocation_count(timestamps_,
+                                       allocation_count_,
+                                       timestamps_with_no_transactions_,
+                                       out_path):
+    """
+    timestamps_: array of timestamps
+    allocation_count_: array of total number of allocations
+    timestamps_with_no_transactions_: Timestamps at which no os_transactions were taken
+    out_path: path to file where plot should be written to
+    """
+
+    def x_tick_formatter(x, y):
+        return TimeUtil.cftime_to_date(x, format="MM/DD HH:mm")
+
+    x_points = np.array(timestamps_)
+    y_points = np.array(allocation_count_)
+
+    axes = plt.axes()
+    axes.grid(axis='y')
+    axes.xaxis.set_major_formatter(
+        plt.FuncFormatter(x_tick_formatter))
+
+    plt.xticks(rotation='vertical')
+    plt.xticks(fontsize=8, rotation=60)
+
+    axes.set_title('Allocation Count', fontsize=12, fontweight="bold")
+    axes.set_xlabel('Timestamp', fontsize=6)
+    axes.set_ylabel('Allocation Count', fontsize=8)
+
+    # Set range for y-axis
+    max_y = np.max(y_points) * 1.1
+    min_y = np.min(y_points) * 0.9
+    axes.set_ylim([min_y, max_y])
+
+    #plt.tight_layout()
+    plt.plot(x_points, y_points, color="blue", label="allocation count")
+
+    # Calculate approximate duration between timestamps
+    duration = 5
+    if len(timestamps_) >=2:
+        duration = timestamps_[1] - timestamps_[0]
+
+    # Plot vertical lines where no transactions were taken
+    for no_transaction_timestamp in timestamps_with_no_transactions_:
+        axes.axvspan(no_transaction_timestamp-duration/2,  # divided by 2, because we dont know when it started
+                     no_transaction_timestamp,
+                     alpha=0.2)
+
+    plt.legend(loc="upper left")
+    plt.savefig(out_path, dpi=200)
+    plt.clf()
+
+
+def plot_timestamp_to_footprint_minus_malloc(timestamps_,
+                                             footprint_minus_malloc_,
+                                             timestamps_with_no_transactions_,
+                                             out_path):
+    """
+    timestamps_: array of timestamps
+    footprint_minus_malloc_: array of size counted against footprint, not coming from malloc regions
+    timestamps_with_no_transactions_: Timestamps at which no os_transactions were taken
+    out_path: path to file where plot should be written to
+    """
+
+    def x_tick_formatter(x, y):
+        return TimeUtil.cftime_to_date(x, format="MM/DD HH:mm")
+
+    x_points = np.array(timestamps_)
+    y_points = np.array(footprint_minus_malloc_) / 1000 # Convert to MB
+
+
+    axes = plt.axes()
+    axes.grid(axis='y')
+    axes.xaxis.set_major_formatter(
+        plt.FuncFormatter(x_tick_formatter))
+
+    plt.xticks(rotation='vertical')
+    plt.xticks(fontsize=8, rotation=60)
+
+    axes.set_title('Footprint minus malloc (MB)', fontsize=12, fontweight="bold")
+    axes.set_xlabel('Timestamp', fontsize=6)
+    axes.set_ylabel('Footprint minus Malloc (MB)', fontsize=8)
+
+    # Set range for y-axis
+    max_y = np.max(y_points) * 1.1
+    min_y = np.min(y_points) * 0.9
+    axes.set_ylim([min_y, max_y])
+
+    #plt.tight_layout()
+    plt.plot(x_points, y_points, color="blue", label="Footprint minus malloc (MB)")
+
+    # Calculate approximate duration between timestamps
+    duration = 5
+    if len(timestamps_) >=2:
+        duration = timestamps_[1] - timestamps_[0]
+
+    # Plot vertical lines where no transactions were taken
+    for no_transaction_timestamp in timestamps_with_no_transactions_:
+        axes.axvspan(no_transaction_timestamp-duration/2,  # divided by 2, because we dont know when it started
+                     no_transaction_timestamp,
+                     alpha=0.2)
+
+    #plt.legend(loc="upper left")
+    plt.savefig(out_path, dpi=200)
+    plt.clf()
+
+
+def report_result(result, out_path):
+    """
+    Writes provided result string to file at out_path
+    :param result: String to be written
+    :param out_path: Path to output file
+    :return:
+    """
+    with open(out_path, "a+") as f_:
+        f_.write(result)
+        f_.close()
+    print(result)
 
 
 if __name__ == '__main__':
@@ -88,17 +327,39 @@ if __name__ == '__main__':
         help="Path to footprint CSV file")
     parser.add_argument(
         '--g',
-        '-out_graph_path',
-        dest="out_graph_path",
-        default="/tmp/footprints.png",
+        '-out_dir',
+        dest="out_dir",
+        default="",
         required=False,
-        help="Path to output PNG file")
+        help="Path to output directory")
     args = parser.parse_args()
 
     LOCATIOND_INACTIVE_JETSAM_LIMIT = 26
     LOCATIOND_ACTIVE_JETSAM_LIMIT = 34
 
+    # Parse arguments
     footprint_csv = args.footprint_csv
+    if not os.path.exists(footprint_csv):
+        print(f"Can't find provided CSV : {footprint_csv}")
+
+    # Create Output directory
+    out_dir = args.out_dir
+    if out_dir == "":
+        out_dir = os.path.join(os.path.dirname(footprint_csv),
+                               "_plots")
+    os.makedirs(out_dir, exist_ok=True)
+
+    out_path_to_footprint_plot = os.path.join(out_dir, "footprint_plot.png")
+    out_path_to_fragmentation_plot = os.path.join(out_dir, "fragmentation_plot.png")
+    out_path_to_allocation_count_plot = os.path.join(out_dir, "allocation_counts.png")
+    out_path_to_footprint_minus_malloc_plot = os.path.join(out_dir, "footprint_minus_malloc.png")
+    out_path_to_results_summary = os.path.join(out_dir, "summary.txt")
+
+    # Clear previous results
+    if os.path.exists(out_path_to_results_summary):
+        os.remove(out_path_to_results_summary)
+
+    # Calculate
     max_active_footprint = 0
     max_inactive_footprint = 0
     max_active_footprint_timestamp = None
@@ -115,37 +376,53 @@ if __name__ == '__main__':
 
     timestamps = []
     footprints = []
-    counts_os_transactions = []
+    bytes_allocated_samples = []
+    allocation_count_samples = []
+    fragmentation_samples = []
+    bytes_lost_to_fragmentation_samples = []
+    footprint_minus_malloc_samples = []
+    dirty_size_samples = []
+    num_os_transactions_samples = []
     pids = []
     uptimes = []
     pid_change_timestamps = []
 
-    footprint_samples = []
-
     print("\n Processing...")
     with open(footprint_csv, "r") as f_:
-        csv_reader = csv.reader(f_, delimiter=",")
+        headers = [h.strip() for h in f_.readline().split(',')]
+        csv_reader = csv.DictReader(f_, delimiter=",", fieldnames=headers)
         for row in csv_reader:
+            row.update({field_name: value.strip() for (field_name, value) in row.items()})
+
             try:
-                timestamp, footprint, num_os_transactions, pid, uptime = row[0], row[1], row[2], row[3], row[4]
+                timestamp = float(row["cftime"].strip())
+                footprint = float(row["physical_footprint"].strip().replace('M', ''))
+                dirty_size = float(row["dirty_size"].strip().replace('M', ''))
+                bytes_allocated = float(row["bytes_allocated"].strip().replace('M', ''))
+                allocation_count = int(row["allocation_count"])
+                fragmentation = float(row["fragmentation"].strip().replace('%', ''))
+                if "bytes_lost_to_fragmentation" in row:
+                    bytes_lost_to_fragmentation = int(row["bytes_lost_to_fragmentation"].strip().replace('K', ''))
+                footprint_minus_malloc = int(row["non_malloc_section"])
+                num_os_transactions = int(row["num_os_transactions"].strip())
+                pid = row["pid_of_locationd"].strip()
+                uptime = row["uptime_locationd"].strip()
+                wallclock = row["wall_clock_time"].strip()
 
-                timestamp = float(timestamp)
-                num_os_transactions = int(num_os_transactions)
                 formatted_date = TimeUtil.cftime_to_date(timestamp)
-
-                # footprint is in KB, instead of MB
-                #if "K" in footprint:
-                #    footprint = float(footprint.replace('K', ''))
-                #    fooprint = footprint/1000
-                #else:
-                footprint = float(footprint.replace('M', ''))
             except:
-                print("Skipping line: {}".format(row))
+                print("Skipping line: {} ".format(row))
                 continue
 
             timestamps.append(timestamp)
             footprints.append(footprint)
-            counts_os_transactions.append(num_os_transactions)
+            bytes_allocated_samples.append(bytes_allocated)
+            fragmentation_samples.append(fragmentation)
+            allocation_count_samples.append(allocation_count)
+            footprint_minus_malloc_samples.append(footprint_minus_malloc)
+            bytes_lost_to_fragmentation_samples.append(bytes_lost_to_fragmentation)
+            num_os_transactions_samples.append(num_os_transactions)
+            dirty_size_samples.append(dirty_size)
             pids.append(pid)
             uptimes.append(uptime)
 
@@ -155,14 +432,16 @@ if __name__ == '__main__':
                 # Check if footprint breached active and inactive limits
                 if footprint > LOCATIOND_INACTIVE_JETSAM_LIMIT and num_os_transactions == 0:
                     number_of_inactive_breaches += 1
-                    print("BREACHED INACTIVE: {} : {}, {}".format(formatted_date, footprint, num_os_transactions))
+                    report_result(f"BREACHED INACTIVE: {formatted_date} : {footprint}, {num_os_transactions}\n",
+                                  out_path_to_results_summary)
 
             if num_os_transactions > 0:
                 number_of_active_samples += 1
 
                 if footprint > LOCATIOND_ACTIVE_JETSAM_LIMIT:
                     number_of_active_breaches += 1
-                    print("BREACHED ACTIVE: {} : {}, {}".format(formatted_date, footprint, num_os_transactions))
+                    report_result(f"BREACHED ACTIVE: {formatted_date} : {footprint}, {num_os_transactions}\n",
+                                  out_path_to_results_summary)
 
             if num_os_transactions == 0:
                 if footprint > max_inactive_footprint:
@@ -176,32 +455,64 @@ if __name__ == '__main__':
             # Track PID changes
             if previous_pid is not None:
                 if not previous_pid == pid:
-                    print("locationd restarted at : {}".format(formatted_date))
+                    report_result(f"locationd restarted at : {formatted_date}\n",
+                                  out_path_to_results_summary)
                     pid_changes += 1
                     pid_change_timestamps.append(timestamp)
             previous_pid = pid
+
+    # Check if at least one entry is existing in CSV
+    if len(timestamps) == 0:
+        print("CSV could not be parsed. No entries found")
+        sys.exit(-1)
 
     # Calculate duration
     duration_of_test = max(timestamps) - min(timestamps)
     time_spent_in_active = number_of_active_samples * 100 / (number_of_active_samples + number_of_inactive_samples)
 
-    print("\n ========================= REPORT  ==============================")
-    print(f"Duration of test \t\t\t: {round(duration_of_test/3600, 2)} hrs")
-    print(f"Max Inactive Footprint \t\t\t: {max_inactive_footprint} MB \t"
-          f"{max_inactive_footprint_timestamp} \t Limit: {LOCATIOND_INACTIVE_JETSAM_LIMIT}")
-    print(f"Max Active Footprint   \t\t\t: {max_active_footprint} MB \t"
-          f"{max_active_footprint_timestamp} \t Limit: {LOCATIOND_ACTIVE_JETSAM_LIMIT}")
-    print(f"Time spent in active \t\t\t: {round(time_spent_in_active, 2)} %")
-    print(f"Number of times locationd restarted\t: {pid_changes}")
-    print(f"Number of Jetsam limit breaches\t\t: Active: {number_of_active_breaches}, "
-          f"Inactive: {number_of_inactive_breaches}")
+    timestamps_with_no_transactions = timestamps_with_zero_transactions(timestamps,
+                                                                        pids,
+                                                                        num_os_transactions_samples)
+
+    report = f"\n ========================= REPORT  ==============================\n"
+    report += f"Duration of test \t\t\t: {round(duration_of_test/3600, 2)} hrs \n"
+    report += f"Max Inactive Footprint \t\t\t: {max_inactive_footprint} MB \t" \
+              f"{max_inactive_footprint_timestamp} \t Limit: {LOCATIOND_INACTIVE_JETSAM_LIMIT} \n"
+    report += f"Max Active Footprint   \t\t\t: {max_active_footprint} MB \t" \
+              f"{max_active_footprint_timestamp} \t Limit: {LOCATIOND_ACTIVE_JETSAM_LIMIT} \n"
+    report += f"Time spent in active \t\t\t: {round(time_spent_in_active, 2)} % \n"
+    report += f"Number of times locationd restarted\t: {pid_changes} \n"
+    report += f"Number of Jetsam limit breaches\t\t: Active: {number_of_active_breaches}, " \
+              f"Inactive: {number_of_inactive_breaches} \n"
+    report_result(report, out_path_to_results_summary)
 
     # Plot the data
-    pid_change_timestamps = [timestamps[20]]
-    plot_timestamp_to_footprint(timestamps=timestamps,
-                                footprints=footprints,
-                                restart_timestamps=pid_change_timestamps,
-                                out_path=args.out_graph_path)
+    plot_timestamp_to_footprint(timestamps_=timestamps,
+                                footprints_=footprints,
+                                bytes_allocated_=bytes_allocated_samples,
+                                dirty_size_samples_=dirty_size_samples,
+                                timestamps_with_no_transactions_=timestamps_with_no_transactions,
+                                out_path=out_path_to_footprint_plot)
+
+    plot_timestamp_to_allocation_count(timestamps_=timestamps,
+                                       allocation_count_=allocation_count_samples,
+                                       timestamps_with_no_transactions_=timestamps_with_no_transactions,
+                                       out_path=out_path_to_allocation_count_plot)
+
+    plot_timestamp_to_bytes_lost_to_fragmentation(timestamps_=timestamps,
+                                                  bytes_lost_to_fragmentation=bytes_lost_to_fragmentation_samples,
+                                                  out_path=out_path_to_fragmentation_plot)
+
+    plot_timestamp_to_footprint_minus_malloc(timestamps_=timestamps,
+                                             footprint_minus_malloc_=footprint_minus_malloc_samples,
+                                             timestamps_with_no_transactions_=timestamps_with_no_transactions,
+                                             out_path=out_path_to_footprint_minus_malloc_plot)
+
+    # Copy HTML to output directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    report_html_path = os.path.join(script_dir, "report.html")
+    shutil.copy(report_html_path, out_dir)
 
     #print(TimeUtil.cftime_to_date(668199100.972570, format="MM/DD HH:mm"))
+    print(f"\nOutput plots written to {out_dir}")
     print("\n")

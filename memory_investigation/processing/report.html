@@ -73,6 +73,8 @@ function showContent(evt, graphContent) {
   <button class="tablinks" onclick="showContent(event, 'Memory_growth')">Memory_growth</button>
   <button class="tablinks" onclick="showContent(event, 'Fragmentation')">Fragmentation</button>
   <button class="tablinks" onclick="showContent(event, 'Number of Allocations')">Allocation Count</button>
+  <button class="tablinks" onclick="showContent(event, 'Footprint minus Malloc')">Footprint Minus Malloc</button>
+  <button class="tablinks" onclick="showContent(event, 'Summary')">Summary</button>
 </div>
 
 <!-- Tab content -->
@@ -86,6 +88,17 @@ function showContent(evt, graphContent) {
 
 <div id="Number of Allocations" class="tabcontent">
   <img src="allocation_counts.png" alt="Not generated"> </img>
+</div>
+
+
+<div id="Footprint minus Malloc" class="tabcontent">
+  <img src="footprint_minus_malloc.png" alt="Not generated"> </img>
+</div>
+
+
+<div id="Summary" class="tabcontent">
+  <p><iframe src="summary.txt" frameborder="0" height="200"
+      width="95%"></iframe></p>
 </div>
 
 </body>
